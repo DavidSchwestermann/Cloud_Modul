@@ -1,39 +1,71 @@
-# Declaring Variables
-variable "rdspasswd" {}
-variable "rdsusername" {}
-# variable "rdsdbname" {}
-# Logging into AWS using IAM role
-provider "aws" {
-  region                  = "us-west-2"
+data "aws_availability_zones" "available" {
+  state = "available"
 }
-# Using Default VPC
-resource "aws_default_vpc" "default" {
+
+resource "aws_subnet" "private" {
+  count             = 2
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = cidrsubnet(aws_vpc.main.cidr_block, 8, 10 + count.index)
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+
   tags = {
-    Name = "Default VPC"
+    Name = "private_${data.aws_availability_zones.available.names[count.index]}"
   }
 }
-# Creating a Security Group for our DB Instance
-resource "aws_security_group" "sg" {
-  name        = "db-wizard"
-  description = "Allow Database inbound traffic"
-  vpc_id      = aws_default_vpc.default.id
-ingress {
-    description = "MYSQL/Aurora"
-    from_port   = 3306
-    to_port     = 3306
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+}
+
+resource "aws_route_table_association" "public" {
+  route_table_id = aws_route_table.public.id
+  subnet_id      = aws_subnet.public.id
+}
+
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_route_table_association" "private" {
+  count          = length(aws_subnet.private)
+  route_table_id = aws_route_table.private.id
+  subnet_id      = aws_subnet.private[count.index].id
+}
+
+resource "aws_security_group" "ec2" {
+  name        = "ec2-allow-ssh-http"
+  description = "Security group for the EC2 instance"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
   egress {
-  from_port   = 0
-  to_port     = 0
-  protocol    = "-1"
-  cidr_blocks = ["0.0.0.0/0"]
-}
-  tags = {
-    Name = "sg-for-db"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
+
 # Creating DB Instance in RDS 
 resource "aws_db_instance" "default" {
   identifier           = "wpdatabase"
