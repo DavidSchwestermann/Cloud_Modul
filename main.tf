@@ -1,3 +1,38 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "us-west-2"
+}
+
+resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+}
+
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.0.0/24"
+  map_public_ip_on_launch = true
+}
+
+# resource "aws_subnet" "private" {
+#   count  = 2
+#   vpc_id = aws_vpc.main.id
+#   cidr_block = cidrsubnet(aws_vpc.main.cidr_block, 8, 10 + count.index)
+# }
+
+
 data "aws_availability_zones" "available" {
   state = "available"
 }
